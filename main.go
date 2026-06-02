@@ -13,6 +13,8 @@ import (
 )
 
 func main() {
+	logger := log.New(os.Stderr, "DEBUG: ", log.LstdFlags)
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
 	httpPort := flag.Int("port", 8899, "port to listen on")
