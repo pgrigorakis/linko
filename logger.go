@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -19,11 +20,12 @@ func requestLogger(logger *log.Logger) func(http.Handler) http.Handler {
 
 func initialiseLogger(logFile string) (*log.Logger, error) {
 	if logFile != "" {
-		f, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		f, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 		if err != nil {
 			return nil, fmt.Errorf("could not open file: %v", err)
 		}
-		multiWriter := io.MultiWriter(os.Stderr, f)
+		bufferedFile := bufio.NewWriterSize(f, 8192)
+		multiWriter := io.MultiWriter(os.Stderr, bufferedFile)
 		return log.New(multiWriter, "", log.LstdFlags), nil
 	}
 
