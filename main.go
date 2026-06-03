@@ -26,7 +26,7 @@ func main() {
 }
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
-	logger, err := initialiseLogger(os.Getenv("LINKO_LOG_FILE"))
+	logger, closeLogger, err := initialiseLogger(os.Getenv("LINKO_LOG_FILE"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", err)
 		return 1
@@ -46,6 +46,13 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 	<-ctx.Done()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	defer func() {
+		err := closeLogger()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close logger: %v\n", err)
+		}
+	}()
 
 	logger.Println("Linko is shutting down")
 	if err := s.shutdown(shutdownCtx); err != nil {
