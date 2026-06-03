@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -25,12 +26,23 @@ func main() {
 }
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
-	st, err := store.New(dataDir)
+
+	stdLogger := log.New(os.Stderr, "DEBUG: ", log.LstdFlags)
+
+	f, err := os.OpenFile("linko.access.log", os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		logger.Printf("failed to create store: %v\n", err)
+		stdLogger.Printf("failed to create log file: %v", err)
+	}
+	defer f.Close()
+
+	accessLogger := log.New(f, "INFO: ", log.LstdFlags)
+
+	st, err := store.New(dataDir, stdLogger)
+	if err != nil {
+		stdLogger.Printf("failed to create store: %v\n", err)
 		return 1
 	}
-	s := newServer(*st, httpPort, cancel)
+	s := newServer(*st, httpPort, cancel, accessLogger)
 	var serverErr error
 	go func() {
 		serverErr = s.start()
@@ -41,11 +53,11 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 	defer cancel()
 
 	if err := s.shutdown(shutdownCtx); err != nil {
-		logger.Printf("failed to shutdown server: %v\n", err)
+		stdLogger.Printf("failed to shutdown server: %v", err)
 		return 1
 	}
 	if serverErr != nil {
-		logger.Printf("server error: %v\n", serverErr)
+		stdLogger.Printf("server error: %v", serverErr)
 		return 1
 	}
 	return 0

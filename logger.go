@@ -3,10 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
-	"os"
 )
-
-var logger = log.New(os.Stderr, "DEBUG: ", log.LstdFlags)
 
 func requestLogger(logger *log.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
