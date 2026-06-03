@@ -17,9 +17,8 @@ func requestLogger(logger *log.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-func initialiseLogger() (*log.Logger, error) {
-	fileName := os.Getenv("LINKO_LOG_FILE")
-	if fileName != "" {
+func initialiseLogger(logFile string) (*log.Logger, error) {
+	if logFile != "" {
 		f, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 		if err != nil {
 			return nil, fmt.Errorf("could not open file: %v", err)
