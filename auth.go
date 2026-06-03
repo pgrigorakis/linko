@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"golang.org/x/crypto/bcrypt"
