@@ -19,6 +19,11 @@ type stackTracer interface {
 	StackTrace() pkgerr.StackTrace
 }
 
+type multiError interface {
+	error
+	Unwrap() []error
+}
+
 func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -73,21 +78,39 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 			return a
 		}
 
-		stdError := []slog.Attr{{
-			Key:   "message",
-			Value: slog.StringValue(err.Error()),
-		}}
-		stdErrorWithAttrs := append(stdError, linkoerr.Attrs(err)...)
-
-		if stackErr, ok := errors.AsType[stackTracer](err); ok {
-			stackTraceErr := slog.Attr{
-				Key:   "stack_trace",
-				Value: slog.StringValue(fmt.Sprintf("%+v", stackErr.StackTrace())),
+		if multiErr, ok := a.Value.Any().(multiError); ok {
+			var errAttrs []slog.Attr
+			for i, err := range multiErr.Unwrap() {
+				stdErrorWithAttrs := getErrorAttrs(err)
+				numberedError := slog.GroupAttrs(
+					fmt.Sprintf("error_%d", i+1),
+					stdErrorWithAttrs...,
+				)
+				errAttrs = append(errAttrs, numberedError)
 			}
-			stdErrorWithAttrs = append(stdErrorWithAttrs, stackTraceErr)
+			return slog.GroupAttrs("errors", errAttrs...)
 		}
 
+		stdErrorWithAttrs := getErrorAttrs(err)
 		return slog.GroupAttrs("error", stdErrorWithAttrs...)
 	}
 	return a
+}
+
+func getErrorAttrs(err error) []slog.Attr {
+	stdError := []slog.Attr{{
+		Key:   "message",
+		Value: slog.StringValue(err.Error()),
+	}}
+	stdErrorWithAttrs := append(stdError, linkoerr.Attrs(err)...)
+
+	if stackErr, ok := errors.AsType[stackTracer](err); ok {
+		stackTraceErr := slog.Attr{
+			Key:   "stack_trace",
+			Value: slog.StringValue(fmt.Sprintf("%+v", stackErr.StackTrace())),
+		}
+		stdErrorWithAttrs = append(stdErrorWithAttrs, stackTraceErr)
+	}
+
+	return stdErrorWithAttrs
 }
