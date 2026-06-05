@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,12 @@ import (
 	"boot.dev/linko/internal/linkoerr"
 	pkgerr "github.com/pkg/errors"
 )
+
+const logContextKey contextKey = "log_context"
+
+type LogContext struct {
+	Username string
+}
 
 type closeFunc func() error
 
@@ -58,16 +65,26 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			spyReader := &spyReadCloser{ReadCloser: r.Body}
 			r.Body = spyReader
 			spyWriter := &spyResponseWriter{ResponseWriter: w}
-			next.ServeHTTP(spyWriter, r)
 
-			logger.Info("Served request",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"client_ip", r.RemoteAddr,
+			logCtx := &LogContext{}
+			ctx := context.WithValue(r.Context(), logContextKey, logCtx)
+			next.ServeHTTP(spyWriter, r.WithContext(ctx))
+
+			attrs := []any{
+				slog.String("method", r.Method),
+				slog.String("path", r.URL.Path),
+				slog.String("client_ip", r.RemoteAddr),
 				slog.Duration("duration", time.Since(start)),
 				slog.Int("request_body_bytes", spyReader.bytesRead),
 				slog.Int("response_status", spyWriter.statusCode),
-				slog.Int("response_body_bytes", spyWriter.bytesWritten))
+				slog.Int("response_body_bytes", spyWriter.bytesWritten),
+			}
+
+			if logCtx.Username != "" {
+				attrs = append(attrs, slog.String("user", logCtx.Username))
+			}
+
+			logger.Info("Served request", attrs...)
 		})
 	}
 }
