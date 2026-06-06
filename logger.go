@@ -19,6 +19,7 @@ const logContextKey contextKey = "log_context"
 
 type LogContext struct {
 	Username string
+	Error    error
 }
 
 type closeFunc func() error
@@ -42,6 +43,12 @@ type spyResponseWriter struct {
 	http.ResponseWriter
 	bytesWritten int
 	statusCode   int
+}
+
+func (r *spyReadCloser) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	r.bytesRead += n
+	return n, err
 }
 
 func (w *spyResponseWriter) Write(p []byte) (int, error) {
@@ -82,6 +89,10 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 
 			if logCtx.Username != "" {
 				attrs = append(attrs, slog.String("user", logCtx.Username))
+			}
+
+			if logCtx.Error != nil {
+				attrs = append(attrs, slog.Any("error", logCtx.Error))
 			}
 
 			logger.Info("Served request", attrs...)
@@ -169,8 +180,9 @@ func getErrorAttrs(err error) []slog.Attr {
 	return stdErrorWithAttrs
 }
 
-func (r *spyReadCloser) Read(p []byte) (int, error) {
-	n, err := r.ReadCloser.Read(p)
-	r.bytesRead += n
-	return n, err
+func httpError(ctx context.Context, w http.ResponseWriter, status int, err error) {
+	if logCtx, ok := ctx.Value(logContextKey).(*LogContext); ok {
+		logCtx.Error = err
+	}
+	http.Error(w, err.Error(), status)
 }
