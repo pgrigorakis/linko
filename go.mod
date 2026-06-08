@@ -7,7 +7,7 @@ require golang.org/x/crypto v0.49.0
 require github.com/pkg/errors v0.9.1
 
 require (
-	github.com/lmittmann/tint v1.1.3 // indirect
-	github.com/mattn/go-isatty v0.0.22 // indirect
+	github.com/lmittmann/tint v1.1.3
+	github.com/mattn/go-isatty v0.0.22
 	golang.org/x/sys v0.42.0 // indirect
 )
