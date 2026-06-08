@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -85,6 +86,7 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 				slog.Int("request_body_bytes", spyReader.bytesRead),
 				slog.Int("response_status", spyWriter.statusCode),
 				slog.Int("response_body_bytes", spyWriter.bytesWritten),
+				slog.String("request_id", spyWriter.Header().Get("X-Request-ID")),
 			}
 
 			if logCtx.Username != "" {
@@ -96,6 +98,21 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			}
 
 			logger.Info("Served request", attrs...)
+		})
+	}
+}
+
+func requestID() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			xRequestIdHeader := r.Header.Get("X-Request-ID")
+
+			if xRequestIdHeader == "" {
+				xRequestIdHeader = rand.Text()
+			}
+
+			w.Header().Set("X-Request-ID", xRequestIdHeader)
+			next.ServeHTTP(w, r)
 		})
 	}
 }
