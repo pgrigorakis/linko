@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"boot.dev/linko/internal/linkoerr"
+	tint "github.com/lmittmann/tint"
+	isatty "github.com/mattn/go-isatty"
 	pkgerr "github.com/pkg/errors"
 )
 
@@ -119,9 +121,10 @@ func requestID() func(http.Handler) http.Handler {
 
 func initialiseLogger(logFile string) (*slog.Logger, closeFunc, error) {
 	handlers := []slog.Handler{
-		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		tint.NewHandler(os.Stderr, &tint.Options{
 			Level:       slog.LevelDebug,
-			ReplaceAttr: replaceAttr}),
+			ReplaceAttr: replaceAttr,
+			NoColor:     checkTerminalIsATTY()}),
 	}
 	closer := func() error { return nil }
 
@@ -202,4 +205,8 @@ func httpError(ctx context.Context, w http.ResponseWriter, status int, err error
 		logCtx.Error = err
 	}
 	http.Error(w, err.Error(), status)
+}
+
+func checkTerminalIsATTY() bool {
+	return isatty.IsCygwinTerminal(os.Stderr.Fd()) || isatty.IsTerminal(os.Stderr.Fd())
 }
