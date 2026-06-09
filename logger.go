@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"errors"
@@ -16,6 +15,7 @@ import (
 	tint "github.com/lmittmann/tint"
 	isatty "github.com/mattn/go-isatty"
 	pkgerr "github.com/pkg/errors"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const logContextKey contextKey = "log_context"
@@ -127,26 +127,24 @@ func initializeLogger(logFile string) (*slog.Logger, closeFunc, error) {
 
 	handlers = append(handlers, tint.NewHandler(os.Stderr, &tint.Options{
 		ReplaceAttr: replaceAttr,
-		NoColor:     !(isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())),
+		NoColor:     !checkTerminalIsATTY(),
 	}))
 
 	if logFile != "" {
-		file, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0x666)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to open log file: %w", err)
+		logger := &lumberjack.Logger{
+			Filename:   logFile,
+			MaxSize:    1,
+			MaxAge:     28,
+			MaxBackups: 10,
+			LocalTime:  false,
+			Compress:   true,
 		}
-		bufferedFile := bufio.NewWriter(file)
-		handlers = append(handlers, slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
+		handlers = append(handlers, slog.NewJSONHandler(logger, &slog.HandlerOptions{
 			ReplaceAttr: replaceAttr,
 		}))
 		closers = append(closers, func() error {
-			if err := bufferedFile.Flush(); err != nil {
-				return fmt.Errorf("failed to flush log file: %w", err)
-			}
-			if err := file.Close(); err != nil {
-				return fmt.Errorf("failed to close log file: %w", err)
-			}
-			return nil
+			err := logger.Close()
+			return err
 		})
 	}
 
