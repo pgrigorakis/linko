@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -83,7 +84,7 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			attrs := []any{
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
-				slog.String("client_ip", r.RemoteAddr),
+				slog.String("client_ip", redactIP(r.RemoteAddr)),
 				slog.Duration("duration", time.Since(start)),
 				slog.Int("request_body_bytes", spyReader.bytesRead),
 				slog.Int("response_status", spyWriter.statusCode),
@@ -206,9 +207,26 @@ func httpError(ctx context.Context, w http.ResponseWriter, status int, err error
 	if logCtx, ok := ctx.Value(logContextKey).(*LogContext); ok {
 		logCtx.Error = err
 	}
+	if status == 401 || status == 403 || status == 500 {
+		err = fmt.Errorf("%v", http.StatusText(status))
+	}
 	http.Error(w, err.Error(), status)
 }
 
 func checkTerminalIsATTY() bool {
 	return isatty.IsCygwinTerminal(os.Stderr.Fd()) || isatty.IsTerminal(os.Stderr.Fd())
+}
+
+func redactIP(addr string) string {
+	addrHost, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+
+	ipAddr := net.ParseIP(addrHost).To4()
+	if ipAddr == nil {
+		return addr
+	}
+
+	return fmt.Sprintf("%d.%d.%d.x", ipAddr[0], ipAddr[1], ipAddr[2])
 }
