@@ -119,41 +119,45 @@ func requestID() func(http.Handler) http.Handler {
 	}
 }
 
-func initialiseLogger(logFile string) (*slog.Logger, closeFunc, error) {
-	handlers := []slog.Handler{
-		tint.NewHandler(os.Stderr, &tint.Options{
-			Level:       slog.LevelDebug,
-			ReplaceAttr: replaceAttr,
-			NoColor:     checkTerminalIsATTY()}),
-	}
-	closer := func() error { return nil }
+func initializeLogger(logFile string) (*slog.Logger, closeFunc, error) {
+	var (
+		handlers []slog.Handler
+		closers  []closeFunc
+	)
+
+	handlers = append(handlers, tint.NewHandler(os.Stderr, &tint.Options{
+		ReplaceAttr: replaceAttr,
+		NoColor:     !(isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())),
+	}))
 
 	if logFile != "" {
-		f, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		file, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0x666)
 		if err != nil {
-			return nil, nil, fmt.Errorf("could not open file: %v", err)
+			return nil, nil, fmt.Errorf("failed to open log file: %w", err)
 		}
-		bufferedFile := bufio.NewWriterSize(f, 8192)
-
-		infoHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
-			Level:       slog.LevelInfo,
+		bufferedFile := bufio.NewWriter(file)
+		handlers = append(handlers, slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
 			ReplaceAttr: replaceAttr,
-		})
-		handlers = append(handlers, infoHandler)
-
-		closer = func() error {
-			err := bufferedFile.Flush()
-			if err != nil {
-				return err
+		}))
+		closers = append(closers, func() error {
+			if err := bufferedFile.Flush(); err != nil {
+				return fmt.Errorf("failed to flush log file: %w", err)
 			}
-			err = f.Close()
-			return err
-		}
+			if err := file.Close(); err != nil {
+				return fmt.Errorf("failed to close log file: %w", err)
+			}
+			return nil
+		})
 	}
 
-	logger := slog.New(slog.NewMultiHandler(handlers...))
-
-	return logger, closer, nil
+	close := func() error {
+		var errs []error
+		for _, closer := range closers {
+			errs = append(errs, closer())
+		}
+		return errors.Join(errs...)
+	}
+	return slog.New(slog.NewMultiHandler(handlers...)), close, nil
 }
 
 func replaceAttr(groups []string, a slog.Attr) slog.Attr {
