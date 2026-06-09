@@ -30,6 +30,11 @@ func main() {
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
 	env := os.Getenv("ENV")
 	hostname, _ := os.Hostname()
+	closeTracer, err := initTracing(context.Background())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize tracer: %v\n", err)
+		return 1
+	}
 	logger, closeLogger, err := initializeLogger(os.Getenv("LINKO_LOG_FILE"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", err)
@@ -61,6 +66,13 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 		err := closeLogger()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to close logger: %v\n", err)
+		}
+	}()
+
+	defer func() {
+		err := closeTracer(context.Background())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close tracer: %v\n", err)
 		}
 	}()
 
