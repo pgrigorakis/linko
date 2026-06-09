@@ -9,7 +9,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"slices"
 	"time"
 
 	"boot.dev/linko/internal/linkoerr"
@@ -160,6 +162,8 @@ func initializeLogger(logFile string) (*slog.Logger, closeFunc, error) {
 }
 
 func replaceAttr(groups []string, a slog.Attr) slog.Attr {
+	sensitiveKeys := []string{"password", "key", "apikey", "secret", "pin", "creditcardno", "user"}
+
 	if a.Key == "error" {
 		err, ok := a.Value.Any().(error)
 		if !ok {
@@ -182,6 +186,19 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 		stdErrorWithAttrs := getErrorAttrs(err)
 		return slog.GroupAttrs("error", stdErrorWithAttrs...)
 	}
+
+	if slices.Contains(sensitiveKeys, a.Key) {
+		a.Value = slog.StringValue("[REDACTED]")
+	}
+
+	if a.Key == "long_url" {
+		parsedUrl, err := url.Parse(a.Value.String())
+		if err != nil {
+			return a
+		}
+		a.Value = slog.StringValue(fmt.Sprintf("%s://%s:[REDACTED]@%s%s", parsedUrl.Scheme, parsedUrl.User.Username(), parsedUrl.Host, parsedUrl.Path))
+	}
+
 	return a
 }
 
